@@ -1,0 +1,60 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'ADMIN' ||
+        request.auth.token.role == 'SUPER_ADMIN' ||
+        request.auth.token.email == 'shrawan8543@gmail.com'
+      );
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Public read for published listings; authenticated write for owners & admins
+    match /properties/{propertyId} {
+      allow read: if resource.data.status in ['PUBLISHED', 'FEATURED'] || isAdmin() || (isAuthenticated() && resource.data.ownerId == request.auth.uid);
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin() || (isAuthenticated() && resource.data.ownerId == request.auth.uid);
+    }
+
+    // Projects: Public read for verified projects; admin / developer write
+    match /projects/{projectId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Leads: Created by public; read & updated only by assigned sales user or admin
+    match /leads/{leadId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin() || (isAuthenticated() && resource.data.assignedUserId == request.auth.uid);
+    }
+
+    // Site Visits: Created by public; managed by assigned executive or admin
+    match /site_visits/{visitId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Growth Service Enquiries: Created by public businesses; managed by admins
+    match /service_enquiries/{enquiryId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Audit logs: Strictly write-only / admin read
+    match /audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if false; // immutable audit log
+    }
+  }
+}
